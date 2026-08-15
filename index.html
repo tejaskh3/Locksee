@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>InsomniacDev — keep building while you grab a coffee</title>
+<title>InsomniacDev — your build keeps running while you're on a break</title>
 <meta name="description" content="A tiny macOS menu bar app that locks your screen and keeps your Mac awake.">
 <style>
   :root {
@@ -146,12 +146,22 @@
   }
   .folder-label { font-size: 10.5px; color: var(--muted); }
 
-  .ctx {
-    background: #fff; border-radius: 7px; padding: 4px; width: 148px;
-    box-shadow: 0 8px 20px rgba(0,0,0,0.18); font-size: 11.5px;
+  /* A Settings "Security" pane, not a right-click menu: macOS 15 removed the
+     Control-click ▸ Open bypass, so depicting it would teach a dead flow. */
+  .secpanel {
+    background: #fff; border: 1px solid var(--line); border-radius: 9px;
+    width: 296px; overflow: hidden; box-shadow: 0 6px 18px rgba(0,0,0,0.10);
   }
-  .ctx div { padding: 3px 8px; border-radius: 4px; color: #16181d; }
-  .ctx .hl { background: #2f6fed; color: #fff; }
+  .sp-title {
+    font-size: 11px; font-weight: 600; color: var(--muted); padding: 7px 12px;
+    border-bottom: 1px solid var(--line); background: var(--panel);
+  }
+  .sp-body { display: flex; align-items: center; gap: 10px; padding: 11px 12px; font-size: 11.5px; }
+  .sp-body span:first-child { flex: 1; color: #16181d; }
+  .sp-btn {
+    background: #2f6fed; color: #fff; border-radius: 6px; padding: 4px 10px;
+    font-size: 11px; font-weight: 500; white-space: nowrap;
+  }
 
   .prefrow {
     display: flex; align-items: center; gap: 12px; background: #fff;
@@ -289,7 +299,7 @@
       </a>
       InsomniacDev
     </h1>
-    <p class="tagline">Keep building while you grab a coffee — or even while you sleep.</p>
+    <p class="tagline">Coffee break. Lunch break. Sutta break. Your build keeps running.</p>
 
     <div class="download">
       <a class="btn" href="./InsomniacDev.zip" download>
@@ -362,10 +372,12 @@
   <h2>Setting it up</h2>
   <ol>
     <li>Unzip and drag <b>InsomniacDev</b> to your Applications folder.</li>
-    <li><b>First launch:</b> right-click the app and choose <b>Open</b>. It's signed with a
-      self-signed certificate rather than a paid Apple developer ID, so double-clicking it
-      the first time gets you a Gatekeeper warning. Right-click ▸ Open gives you the button
-      to proceed. Once only.</li>
+    <li><b>First launch:</b> macOS will refuse to open it, because it's signed with a
+      self-signed certificate rather than a paid Apple developer ID. Open <b>System Settings ▸
+      Privacy &amp; Security</b>, scroll to <b>Security</b>, and click <b>Open Anyway</b>.
+      (Control-clicking ▸ Open no longer works — Apple removed that in macOS 15.) The button
+      only appears for about an hour after a blocked launch, so if it isn't there, try opening
+      the app again. Once only.</li>
     <li>Grant <b>Accessibility</b> when asked — System Settings ▸ Privacy &amp; Security ▸
       Accessibility. That's what lets it block input while locked; without it you'd get a
       shield that stops nothing.</li>
@@ -394,10 +406,12 @@
             <path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"></path>
           </svg>
         </span>
-        <div class="ctx">
-          <div class="hl">Open</div>
-          <div>Show Package Contents</div>
-          <div>Get Info</div>
+        <div class="secpanel">
+          <div class="sp-title">Security</div>
+          <div class="sp-body">
+            <span>"InsomniacDev" was blocked to protect your Mac.</span>
+            <span class="sp-btn">Open Anyway</span>
+          </div>
         </div>
       </div>
 
@@ -614,7 +628,7 @@ open InsomniacDev.app</pre>
   const dots = document.querySelectorAll(".steps .d");
   const SETUP = [
     "Drag it to Applications",
-    "First launch: right-click ▸ Open",
+    "First launch: click Open Anyway in Settings",
     "Allow it under Accessibility"
   ];
 
