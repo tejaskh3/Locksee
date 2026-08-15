@@ -1,10 +1,10 @@
 #!/bin/bash
-# Builds InsomniacDev.app — a native macOS menu bar screen locker.
+# Builds Locksee.app — a native macOS menu bar screen locker.
 set -euo pipefail
 cd "$(dirname "$0")"
 
-APP="InsomniacDev.app"
-NAME="InsomniacDev"
+APP="Locksee.app"
+NAME="Locksee"
 
 echo "→ Compiling…"
 rm -rf "$APP"
@@ -20,8 +20,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <plist version="1.0">
 <dict>
     <key>CFBundleName</key><string>$NAME</string>
-    <key>CFBundleDisplayName</key><string>InsomniacDev</string>
-    <key>CFBundleIdentifier</key><string>com.tejas.insomniacdev</string>
+    <key>CFBundleDisplayName</key><string>Locksee</string>
+    <key>CFBundleIdentifier</key><string>com.tejas.locksee</string>
     <key>CFBundleVersion</key><string>1.0</string>
     <key>CFBundleShortVersionString</key><string>1.0</string>
     <key>CFBundlePackageType</key><string>APPL</string>
@@ -44,8 +44,8 @@ PLIST
 #
 # The default is deliberately still "Locker Dev": the identity is just a name in the
 # keychain and never appears in the app, so reusing the existing certificate avoids
-# minting a new one for a rename. Point INSOMNIACDEV_SIGN_ID at another identity to switch.
-SIGN_ID="${INSOMNIACDEV_SIGN_ID:-Locker Dev}"
+# minting a new one for a rename. Point LOCKSEE_SIGN_ID at another identity to switch.
+SIGN_ID="${LOCKSEE_SIGN_ID:-Locker Dev}"
 
 # Note: no -v. The identity is a self-signed root, so it reports as untrusted
 # (CSSMERR_TP_NOT_TRUSTED) and -v would hide it — but codesign signs with it

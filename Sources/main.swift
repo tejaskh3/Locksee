@@ -162,9 +162,9 @@ final class KeepAwakeController {
 
     private let defaults = UserDefaults.standard
     private let system = SleepAssertion(
-        type: kIOPMAssertionTypeNoIdleSleep, reason: "InsomniacDev: keep awake")
+        type: kIOPMAssertionTypeNoIdleSleep, reason: "Locksee: keep awake")
     private let display = SleepAssertion(
-        type: kIOPMAssertionTypeNoDisplaySleep, reason: "InsomniacDev: keep display awake")
+        type: kIOPMAssertionTypeNoDisplaySleep, reason: "Locksee: keep display awake")
 
     private var expiryTimer: Timer?
     private var batteryTimer: Timer?
@@ -365,7 +365,7 @@ final class KeepAwakeController {
     }
 
     var statusSummary: String {
-        guard isActive else { return "InsomniacDev — click for the menu, double-click to lock" }
+        guard isActive else { return "Locksee — click for the menu, double-click to lock" }
         return "Keeping awake" + (remainingDescription.map { " · \($0)" } ?? " · no time limit")
     }
 }
@@ -555,7 +555,7 @@ final class AppController: NSObject, NSApplicationDelegate {
     /// Deliberately a separate assertion from `keepAwake` — unlocking must never tear
     /// down a keep-awake session the user switched on themselves.
     private let lockAssertion = SleepAssertion(
-        type: kIOPMAssertionTypeNoDisplaySleep, reason: "InsomniacDev: screen locked")
+        type: kIOPMAssertionTypeNoDisplaySleep, reason: "Locksee: screen locked")
     let keepAwake = KeepAwakeController()
     let hotKey = HotKeyController()
 
@@ -773,7 +773,7 @@ final class AppController: NSObject, NSApplicationDelegate {
 
         menu.addItem(.separator())
 
-        let quitItem = NSMenuItem(title: "Quit InsomniacDev", action: #selector(quit), keyEquivalent: "q")
+        let quitItem = NSMenuItem(title: "Quit Locksee", action: #selector(quit), keyEquivalent: "q")
         quitItem.target = self
         menu.addItem(quitItem)
 
@@ -1225,9 +1225,9 @@ final class AppController: NSObject, NSApplicationDelegate {
         let alert = NSAlert()
         alert.messageText = "Accessibility permission needed"
         alert.informativeText = """
-        To block the keyboard and mouse while locked, InsomniacDev needs Accessibility access.
+        To block the keyboard and mouse while locked, Locksee needs Accessibility access.
 
-        Open System Settings ▸ Privacy & Security ▸ Accessibility, enable “InsomniacDev”, \
+        Open System Settings ▸ Privacy & Security ▸ Accessibility, enable “Locksee”, \
         then click the menu bar lock again.
         """
         alert.addButton(withTitle: "Open Settings")
