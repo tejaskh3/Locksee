@@ -133,12 +133,18 @@
      onto the folder) buries the folder underneath the icon. */
   .glide { transform: translateX(-46px); transition: transform 1.1s cubic-bezier(.4,0,.2,1); }
   .stage[data-step="1"] .glide { transform: translateX(0); }
+  /* Label sits under the folder, not inside it — "Applications" is wider than the
+     shape and spills out when centred within it. */
+  .folder-wrap { display: flex; flex-direction: column; align-items: center; gap: 7px; flex: none; }
   .folder {
-    width: 56px; height: 46px; border-radius: 4px 9px 9px 9px; flex: none;
-    background: #7fa8d8; box-shadow: 0 4px 12px rgba(0,0,0,0.14);
-    display: grid; place-items: end center; padding-bottom: 5px;
-    color: rgba(255,255,255,0.95); font-size: 9px;
+    width: 58px; height: 44px; border-radius: 3px 8px 8px 8px; position: relative;
+    background: linear-gradient(#93b9e2, #6d9cd3); box-shadow: 0 4px 12px rgba(0,0,0,0.14);
   }
+  .folder::before {
+    content: ""; position: absolute; top: -6px; left: 0; width: 25px; height: 8px;
+    border-radius: 3px 6px 0 0; background: #93b9e2;
+  }
+  .folder-label { font-size: 10.5px; color: var(--muted); }
 
   .ctx {
     background: #fff; border-radius: 7px; padding: 4px; width: 148px;
@@ -185,6 +191,52 @@
   }
   .features b { display: block; font-weight: 600; }
   .features span { color: var(--muted); font-size: 0.9rem; }
+
+  code {
+    font: 0.88em ui-monospace, SFMono-Regular, Menlo, monospace;
+    background: var(--code-bg); border-radius: 4px; padding: 1px 5px;
+  }
+
+  /* Built on <details> rather than JS toggles: keyboard and screen-reader support
+     comes for free, and the answers stay readable with scripting off. */
+  .matrix { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .mrow { display: grid; grid-template-columns: 1fr 86px 86px; gap: 10px; align-items: center; }
+  .mhead {
+    background: var(--panel); padding: 9px 14px; font-size: 0.72rem; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted);
+    border-bottom: 1px solid var(--line);
+  }
+  .mhead span + span { text-align: center; }
+
+  .matrix details { border-bottom: 1px solid var(--line); }
+  .matrix details:last-child { border-bottom: 0; }
+  .matrix summary {
+    padding: 11px 14px; cursor: pointer; list-style: none; font-size: 0.94rem;
+    color: var(--text);
+  }
+  .matrix summary::-webkit-details-marker { display: none; }
+  .matrix summary:hover { background: var(--panel); }
+  .matrix details[open] summary { background: var(--panel); }
+  .sit::before {
+    content: "›"; display: inline-block; width: 13px; color: var(--muted);
+    transition: transform 0.2s ease;
+  }
+  .matrix details[open] .sit::before { transform: rotate(90deg); }
+
+  .pill {
+    display: block; text-align: center; font-size: 0.73rem; font-weight: 600;
+    padding: 3px 0; border-radius: 20px; border: 1px solid;
+  }
+  .yes  { color: #1a7a45; background: #e8f6ee; border-color: #c2e5d1; }
+  .no   { color: #a33a32; background: #fbecea; border-color: #f0cdc8; }
+  .warn { color: #8a6216; background: #fdf3e0; border-color: #f0dcb6; }
+  .na   { color: var(--muted); background: var(--panel); border-color: var(--line); }
+  .why { padding: 0 14px 13px 27px; margin: 0; color: var(--muted); font-size: 0.9rem; }
+
+  @media (max-width: 520px) {
+    .mrow { grid-template-columns: 1fr 68px 68px; gap: 6px; }
+    .pill { font-size: 0.66rem; }
+  }
 
   kbd {
     background: var(--code-bg); border: 1px solid var(--line); border-bottom-width: 2px;
@@ -334,7 +386,10 @@
             <path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"></path>
           </svg>
         </span>
-        <span class="folder">Applications</span>
+        <span class="folder-wrap">
+          <span class="folder"></span>
+          <span class="folder-label">Applications</span>
+        </span>
       </div>
 
       <div class="frame f2">
@@ -405,13 +460,94 @@ open InsomniacDev.app</pre>
     <li><b>Launch at Login</b><span>Start with the Mac, and optionally start caffeinated too.</span></li>
   </ul>
 
-  <h2>Known limits</h2>
-  <p class="note">
-    Nothing keeps a Mac awake through a closed lid — macOS forces sleep on clamshell
-    regardless. Sleep you ask for explicitly isn't blocked either; only idle sleep is. And a
-    display plugged in while the screen is already locked won't be covered until you unlock
-    and lock again.
-  </p>
+  <h2>When it works</h2>
+  <div class="matrix">
+    <div class="mrow mhead">
+      <span>Situation</span><span>This app</span><span>caffeinate</span>
+    </div>
+
+    <details open>
+      <summary class="mrow">
+        <span class="sit">You lock the screen and walk away</span>
+        <span class="pill yes">Works</span>
+        <span class="pill yes">Works</span>
+      </summary>
+      <p class="why">
+        Power assertions belong to the process, not to your session's UI, so locking doesn't
+        touch them. Confirmed on a real run: the keep-awake and screen-locked assertions were
+        held simultaneously by the same process. This is the case the app is built for — lock
+        up, walk off, build keeps going.
+      </p>
+    </details>
+
+    <details>
+      <summary class="mrow">
+        <span class="sit">You close the lid</span>
+        <span class="pill no">Sleeps</span>
+        <span class="pill no">Sleeps</span>
+      </summary>
+      <p class="why">
+        Closing the lid triggers a different sleep path, one that power assertions don't touch.
+        So no assertion-based tool survives it — not this one, not <code>caffeinate</code>, and
+        not KeepingYouAwake, whose own FAQ says it "will only prevent sleep on desktop Macs and
+        portable Macs with an open lid." Getting past a closed lid needs a different mechanism
+        altogether: clamshell mode, a root-level <code>pmset</code> change, or one of the newer
+        tools that read the lid-angle sensor on recent Apple silicon. Worth remembering why
+        macOS does this — a laptop that never sleeps in a closed bag gets hot.
+      </p>
+    </details>
+
+    <details>
+      <summary class="mrow">
+        <span class="sit">Lid closed, on power, external display + keyboard</span>
+        <span class="pill yes">Works</span>
+        <span class="pill yes">Works</span>
+      </summary>
+      <p class="why">
+        This is macOS's own clamshell mode rather than anything an app does — the system simply
+        declines to sleep when those conditions are met. You don't need either tool for it.
+      </p>
+    </details>
+
+    <details>
+      <summary class="mrow">
+        <span class="sit">You choose Sleep from the Apple menu</span>
+        <span class="pill no">Sleeps</span>
+        <span class="pill no">Sleeps</span>
+      </summary>
+      <p class="why">
+        Only <em>idle</em> sleep is blocked. Sleep you ask for explicitly is honoured — which is
+        what you'd want, since the alternative is a Mac that ignores you.
+      </p>
+    </details>
+
+    <details>
+      <summary class="mrow">
+        <span class="sit">Battery drops to 15% while unattended</span>
+        <span class="pill warn">Stops itself</span>
+        <span class="pill no">Runs it flat</span>
+      </summary>
+      <p class="why">
+        The one real difference in day-to-day use. Set a cutoff between 10% and 40% and the
+        session ends itself when you hit it. <code>caffeinate</code> has no battery awareness:
+        left running on battery, it will happily hold your Mac awake until it dies.
+      </p>
+    </details>
+
+    <details>
+      <summary class="mrow">
+        <span class="sit">You want input blocked while you're away from the desk</span>
+        <span class="pill yes">Works</span>
+        <span class="pill na">n/a</span>
+      </summary>
+      <p class="why">
+        The shield swallows keys, clicks and trackpad gestures until you Touch ID back in.
+        <code>caffeinate</code> doesn't do this — it isn't a locker. One caveat: displays are
+        shielded as they were when you locked, so a monitor plugged in mid-lock isn't covered
+        until you unlock and lock again.
+      </p>
+    </details>
+  </div>
 </main>
 
 <footer>

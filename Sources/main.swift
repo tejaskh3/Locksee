@@ -546,10 +546,14 @@ final class AppController: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     private var lockWindows: [LockWindow] = []
 
-    /// Held only while the shield is up, so the screen the user is standing in
-    /// front of doesn't dim mid-session. Deliberately a separate assertion from
-    /// `keepAwake` — unlocking must never tear down a keep-awake session the user
-    /// switched on themselves.
+    /// Held only while the shield is up. Not so the user can watch it — they're away
+    /// from the desk, that's the whole point — but so the shield is still what greets
+    /// them on return. The tap swallows every event, so macOS reads the Mac as idle
+    /// and sleeps the display within minutes; past that point what unlocks it depends
+    /// on an unrelated Lock Screen setting rather than on Locker.
+    ///
+    /// Deliberately a separate assertion from `keepAwake` — unlocking must never tear
+    /// down a keep-awake session the user switched on themselves.
     private let lockAssertion = SleepAssertion(
         type: kIOPMAssertionTypeNoDisplaySleep, reason: "InsomniacDev: screen locked")
     let keepAwake = KeepAwakeController()
