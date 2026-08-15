@@ -11,7 +11,8 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS"
 
 swiftc -O -o "$APP/Contents/MacOS/$NAME" Sources/main.swift \
-    -framework Cocoa -framework LocalAuthentication -framework IOKit
+    -framework Cocoa -framework LocalAuthentication -framework IOKit \
+    -framework ServiceManagement
 
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>

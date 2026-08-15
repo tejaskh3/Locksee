@@ -1,6 +1,8 @@
 import Cocoa
 import LocalAuthentication
 import IOKit.pwr_mgt
+import IOKit.ps
+import ServiceManagement
 import ApplicationServices
 
 // MARK: - System-wide input tap callback
@@ -63,12 +65,275 @@ final class LockView: NSView {
     override func keyDown(with event: NSEvent) { onUnlockRequest?() }
 }
 
+// MARK: - Power assertions
+
+/// Owns exactly one IOPMAssertion. Acquire/release are idempotent.
+///
+/// Unlike the raw C call, a failure here is reported rather than swallowed: an
+/// assertion that silently failed to take means the Mac sleeps through the very
+/// job the user turned this on to protect, with the UI still claiming it's awake.
+final class SleepAssertion {
+    private let type: CFString
+    private let reason: String
+    private var id: IOPMAssertionID = 0
+
+    init(type: String, reason: String) {
+        self.type = type as CFString
+        self.reason = reason
+    }
+
+    var isHeld: Bool { id != 0 }
+
+    @discardableResult
+    func acquire() -> Bool {
+        guard id == 0 else { return true }
+        var newID: IOPMAssertionID = 0
+        let status = IOPMAssertionCreateWithName(
+            type,
+            IOPMAssertionLevel(kIOPMAssertionLevelOn),
+            reason as CFString,
+            &newID
+        )
+        guard status == kIOReturnSuccess else { return false }
+        id = newID
+        return true
+    }
+
+    func release() {
+        guard id != 0 else { return }
+        IOPMAssertionRelease(id)
+        id = 0
+    }
+
+    deinit { release() }
+}
+
+// MARK: - Keep awake
+
+/// Standalone "don't let this Mac sleep" toggle, independent of the screen lock.
+///
+/// Defaults to PreventUserIdleSystemSleep rather than NoDisplaySleep. The point is
+/// that background work keeps running, and that does not require the panel to stay
+/// lit — on a laptop the display is the single largest draw, so forcing it on is
+/// opt-in via `keepDisplayOn`.
+///
+/// Note this cannot survive a lid close. macOS forces sleep on clamshell regardless
+/// of any assertion (barring true clamshell mode: AC + external display + external
+/// input), so neither this nor any other userspace app can promise otherwise.
+final class KeepAwakeController {
+    enum Duration: Equatable {
+        case indefinite
+        case minutes(Int)
+    }
+
+    private enum Key {
+        static let keepDisplayOn = "keepDisplayOn"
+        static let lowBatteryCutoff = "lowBatteryCutoff"
+        static let batteryFloor = "batteryFloorPercent"
+        static let activateOnLaunch = "activateOnLaunch"
+    }
+
+    private let defaults = UserDefaults.standard
+    private let system = SleepAssertion(
+        type: kIOPMAssertionTypeNoIdleSleep, reason: "Locker: keep awake")
+    private let display = SleepAssertion(
+        type: kIOPMAssertionTypeNoDisplaySleep, reason: "Locker: keep display awake")
+
+    private var expiryTimer: Timer?
+    private var batteryTimer: Timer?
+
+    private(set) var isActive = false
+    private(set) var expiresAt: Date?
+    private(set) var lastError: String?
+
+    /// Fired on every state change so the menu bar can redraw itself.
+    var onChange: (() -> Void)?
+
+    init() {
+        defaults.register(defaults: [
+            Key.keepDisplayOn: false,
+            Key.lowBatteryCutoff: true,
+            Key.batteryFloor: 20,
+            Key.activateOnLaunch: false
+        ])
+    }
+
+    // MARK: Preferences
+
+    var keepDisplayOn: Bool {
+        get { defaults.bool(forKey: Key.keepDisplayOn) }
+        set {
+            defaults.set(newValue, forKey: Key.keepDisplayOn)
+            // Apply immediately if a session is already running, so the toggle
+            // doesn't appear to do nothing until the next activation.
+            if isActive {
+                if newValue { display.acquire() } else { display.release() }
+            }
+            onChange?()
+        }
+    }
+
+    var lowBatteryCutoff: Bool {
+        get { defaults.bool(forKey: Key.lowBatteryCutoff) }
+        set {
+            defaults.set(newValue, forKey: Key.lowBatteryCutoff)
+            if isActive { startBatteryWatch() }
+            onChange?()
+        }
+    }
+
+    var batteryFloor: Int {
+        get { defaults.integer(forKey: Key.batteryFloor) }
+        set { defaults.set(newValue, forKey: Key.batteryFloor); onChange?() }
+    }
+
+    var activateOnLaunch: Bool {
+        get { defaults.bool(forKey: Key.activateOnLaunch) }
+        set { defaults.set(newValue, forKey: Key.activateOnLaunch); onChange?() }
+    }
+
+    // MARK: Activation
+
+    @discardableResult
+    func activate(for duration: Duration) -> Bool {
+        // Refuse rather than pretend. Turning on below the floor would only trip
+        // the cutoff a minute later, which reads as a bug.
+        if let blocked = lowBatteryBlock() {
+            lastError = blocked
+            onChange?()
+            return false
+        }
+        guard system.acquire() else {
+            lastError = "The system refused the power assertion."
+            onChange?()
+            return false
+        }
+        if keepDisplayOn { display.acquire() }
+
+        isActive = true
+        lastError = nil
+        scheduleExpiry(duration)
+        startBatteryWatch()
+        onChange?()
+        return true
+    }
+
+    func deactivate() {
+        expiryTimer?.invalidate()
+        expiryTimer = nil
+        batteryTimer?.invalidate()
+        batteryTimer = nil
+        display.release()
+        system.release()
+        isActive = false
+        expiresAt = nil
+        onChange?()
+    }
+
+    @discardableResult
+    func toggle(duration: Duration = .indefinite) -> Bool {
+        if isActive {
+            deactivate()
+            return true
+        }
+        return activate(for: duration)
+    }
+
+    /// Timed sessions end themselves. `.indefinite` clears any pending expiry so
+    /// switching from "1 hour" to "indefinitely" doesn't inherit the old deadline.
+    private func scheduleExpiry(_ duration: Duration) {
+        expiryTimer?.invalidate()
+        expiryTimer = nil
+        expiresAt = nil
+
+        guard case .minutes(let mins) = duration else { return }
+        let deadline = Date().addingTimeInterval(TimeInterval(mins * 60))
+        expiresAt = deadline
+
+        let timer = Timer(fire: deadline, interval: 0, repeats: false) { [weak self] _ in
+            self?.deactivate()
+        }
+        // .common so it still fires while a menu is tracking the run loop.
+        RunLoop.main.add(timer, forMode: .common)
+        expiryTimer = timer
+    }
+
+    // MARK: Low-battery cutoff
+
+    private func startBatteryWatch() {
+        batteryTimer?.invalidate()
+        batteryTimer = nil
+        guard lowBatteryCutoff else { return }
+
+        let timer = Timer(timeInterval: 60, repeats: true) { [weak self] _ in
+            guard let self, self.lowBatteryBlock() != nil else { return }
+            self.lastError = "Keep awake switched off — battery below \(self.batteryFloor)%."
+            self.deactivate()
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        batteryTimer = timer
+    }
+
+    /// Non-nil when the low-battery cutoff should prevent or end a session.
+    /// Always nil on AC, and on desktop Macs with no battery to read.
+    private func lowBatteryBlock() -> String? {
+        guard lowBatteryCutoff,
+              let state = Self.batteryState(),
+              !state.onAC,
+              state.percent <= batteryFloor
+        else { return nil }
+        return "Battery is at \(state.percent)%, at or below the \(batteryFloor)% cutoff."
+    }
+
+    /// Charge percentage and whether we're on AC, or nil when there's no battery.
+    static func batteryState() -> (percent: Int, onAC: Bool)? {
+        guard let blob = IOPSCopyPowerSourcesInfo()?.takeRetainedValue(),
+              let sources = IOPSCopyPowerSourcesList(blob)?.takeRetainedValue() as? [CFTypeRef]
+        else { return nil }
+
+        for source in sources {
+            guard let desc = IOPSGetPowerSourceDescription(blob, source)?
+                    .takeUnretainedValue() as? [String: Any],
+                  let current = desc[kIOPSCurrentCapacityKey] as? Int,
+                  let capacity = desc[kIOPSMaxCapacityKey] as? Int, capacity > 0
+            else { continue }
+            let onAC = (desc[kIOPSPowerSourceStateKey] as? String) == kIOPSACPowerValue
+            return (Int((Double(current) / Double(capacity) * 100).rounded()), onAC)
+        }
+        return nil
+    }
+
+    // MARK: Display strings
+
+    /// "42 minutes left" / "1h 20m left", or nil for an indefinite session.
+    var remainingDescription: String? {
+        guard let expiresAt else { return nil }
+        let seconds = max(0, Int(expiresAt.timeIntervalSinceNow.rounded()))
+        let minutes = (seconds + 59) / 60
+        if minutes < 60 { return "\(minutes) min left" }
+        return "\(minutes / 60)h \(minutes % 60)m left"
+    }
+
+    var statusSummary: String {
+        guard isActive else { return "Locker — click to lock" }
+        return "Keeping awake" + (remainingDescription.map { " · \($0)" } ?? " · no time limit")
+    }
+}
+
 // MARK: - Controller
 
 final class AppController: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     private var lockWindows: [LockWindow] = []
-    private var sleepAssertionID: IOPMAssertionID = 0
+
+    /// Held only while the shield is up, so the screen the user is standing in
+    /// front of doesn't dim mid-session. Deliberately a separate assertion from
+    /// `keepAwake` — unlocking must never tear down a keep-awake session the user
+    /// switched on themselves.
+    private let lockAssertion = SleepAssertion(
+        type: kIOPMAssertionTypeNoDisplaySleep, reason: "Locker: screen locked")
+    let keepAwake = KeepAwakeController()
+
     private(set) var isLocked = false
     private(set) var isAuthenticating = false
 
@@ -90,13 +355,29 @@ final class AppController: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let button = statusItem.button {
-            let img = NSImage(systemSymbolName: "lock.fill", accessibilityDescription: "Lock")
-            img?.isTemplate = true
-            button.image = img
             button.target = self
             button.action = #selector(statusClicked)
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
+
+        keepAwake.onChange = { [weak self] in self?.refreshStatusItem() }
+        refreshStatusItem()
+
+        if keepAwake.activateOnLaunch {
+            keepAwake.activate(for: .indefinite)
+        }
+    }
+
+    /// The icon is the only feedback that keep-awake is on, so it has to reflect
+    /// state: a mug while awake, the lock otherwise.
+    private func refreshStatusItem() {
+        guard let button = statusItem?.button else { return }
+        let symbol = keepAwake.isActive ? "cup.and.saucer.fill" : "lock.fill"
+        let label = keepAwake.isActive ? "Keeping awake" : "Lock"
+        let image = NSImage(systemSymbolName: symbol, accessibilityDescription: label)
+        image?.isTemplate = true
+        button.image = image
+        button.toolTip = keepAwake.statusSummary
     }
 
     // MARK: Menu bar interaction
@@ -109,12 +390,84 @@ final class AppController: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Minutes offered in the Duration submenu. 0 means "no time limit".
+    private static let durations: [(title: String, minutes: Int)] = [
+        ("Indefinitely", 0),
+        ("5 minutes", 5),
+        ("15 minutes", 15),
+        ("1 hour", 60),
+        ("2 hours", 120),
+        ("5 hours", 300)
+    ]
+
     private func showMenu() {
         let menu = NSMenu()
+
         let lockItem = NSMenuItem(title: "Lock Screen", action: #selector(lock), keyEquivalent: "l")
         lockItem.target = self
         menu.addItem(lockItem)
+
         menu.addItem(.separator())
+
+        let awakeItem = NSMenuItem(
+            title: "Keep Awake", action: #selector(toggleKeepAwake), keyEquivalent: "k")
+        awakeItem.target = self
+        awakeItem.state = keepAwake.isActive ? .on : .off
+        menu.addItem(awakeItem)
+
+        // Only meaningful while a session is running, so it doubles as the
+        // countdown readout rather than sitting there empty.
+        if keepAwake.isActive {
+            let status = NSMenuItem(
+                title: "  " + (keepAwake.remainingDescription ?? "No time limit"),
+                action: nil, keyEquivalent: "")
+            status.isEnabled = false
+            menu.addItem(status)
+        }
+
+        let durationItem = NSMenuItem(title: "Start For", action: nil, keyEquivalent: "")
+        let durationMenu = NSMenu()
+        for (title, minutes) in Self.durations {
+            let item = NSMenuItem(
+                title: title, action: #selector(startForDuration(_:)), keyEquivalent: "")
+            item.target = self
+            item.tag = minutes
+            durationMenu.addItem(item)
+        }
+        durationItem.submenu = durationMenu
+        menu.addItem(durationItem)
+
+        menu.addItem(.separator())
+
+        let displayItem = NSMenuItem(
+            title: "Also Keep Display On", action: #selector(toggleKeepDisplayOn), keyEquivalent: "")
+        displayItem.target = self
+        displayItem.state = keepAwake.keepDisplayOn ? .on : .off
+        displayItem.toolTip =
+            "Off by default: work keeps running with the screen dark, which saves battery."
+        menu.addItem(displayItem)
+
+        let batteryTitle = "Switch Off Below \(keepAwake.batteryFloor)%"
+        let batteryItem = NSMenuItem(
+            title: batteryTitle, action: #selector(toggleLowBatteryCutoff), keyEquivalent: "")
+        batteryItem.target = self
+        batteryItem.state = keepAwake.lowBatteryCutoff ? .on : .off
+        menu.addItem(batteryItem)
+
+        let onLaunchItem = NSMenuItem(
+            title: "Keep Awake On Launch", action: #selector(toggleActivateOnLaunch), keyEquivalent: "")
+        onLaunchItem.target = self
+        onLaunchItem.state = keepAwake.activateOnLaunch ? .on : .off
+        menu.addItem(onLaunchItem)
+
+        let loginItem = NSMenuItem(
+            title: "Launch at Login", action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
+        loginItem.target = self
+        loginItem.state = launchesAtLogin ? .on : .off
+        menu.addItem(loginItem)
+
+        menu.addItem(.separator())
+
         let quitItem = NSMenuItem(title: "Quit Locker", action: #selector(quit), keyEquivalent: "q")
         quitItem.target = self
         menu.addItem(quitItem)
@@ -126,6 +479,66 @@ final class AppController: NSObject, NSApplicationDelegate {
 
     @objc private func quit() { NSApplication.shared.terminate(nil) }
 
+    // MARK: Keep-awake actions
+
+    @objc private func toggleKeepAwake() {
+        if !keepAwake.toggle() { reportKeepAwakeFailure() }
+    }
+
+    @objc private func startForDuration(_ sender: NSMenuItem) {
+        let duration: KeepAwakeController.Duration =
+            sender.tag == 0 ? .indefinite : .minutes(sender.tag)
+        // Re-activate rather than toggle: picking a duration while already running
+        // should reset the clock, not switch the session off.
+        keepAwake.deactivate()
+        if !keepAwake.activate(for: duration) { reportKeepAwakeFailure() }
+    }
+
+    @objc private func toggleKeepDisplayOn() {
+        keepAwake.keepDisplayOn.toggle()
+    }
+
+    @objc private func toggleLowBatteryCutoff() {
+        keepAwake.lowBatteryCutoff.toggle()
+    }
+
+    @objc private func toggleActivateOnLaunch() {
+        keepAwake.activateOnLaunch.toggle()
+    }
+
+    /// A refused assertion is invisible otherwise — the user would think the Mac
+    /// was being held awake when it wasn't.
+    private func reportKeepAwakeFailure() {
+        guard let message = keepAwake.lastError else { return }
+        let alert = NSAlert()
+        alert.messageText = "Couldn't keep the Mac awake"
+        alert.informativeText = message
+        alert.alertStyle = .warning
+        NSApp.activate(ignoringOtherApps: true)
+        alert.runModal()
+    }
+
+    // MARK: Launch at login
+
+    private var launchesAtLogin: Bool { SMAppService.mainApp.status == .enabled }
+
+    @objc private func toggleLaunchAtLogin() {
+        do {
+            if launchesAtLogin {
+                try SMAppService.mainApp.unregister()
+            } else {
+                try SMAppService.mainApp.register()
+            }
+        } catch {
+            let alert = NSAlert()
+            alert.messageText = "Couldn't change the login item"
+            alert.informativeText = error.localizedDescription
+            alert.alertStyle = .warning
+            NSApp.activate(ignoringOtherApps: true)
+            alert.runModal()
+        }
+    }
+
     // MARK: Locking
 
     @objc private func lock() {
@@ -136,7 +549,7 @@ final class AppController: NSObject, NSApplicationDelegate {
         guard ensureAccessibilityPermission() else { return }
 
         isLocked = true
-        keepAwake(true)
+        lockAssertion.acquire()
 
         for screen in NSScreen.screens {
             let window = LockWindow(
@@ -215,7 +628,7 @@ final class AppController: NSObject, NSApplicationDelegate {
         for window in lockWindows { window.orderOut(nil) }
         lockWindows.removeAll()
         hintLabels.removeAll()
-        keepAwake(false)
+        lockAssertion.release()
     }
 
     // MARK: Input tap
@@ -413,23 +826,6 @@ final class AppController: NSObject, NSApplicationDelegate {
             }
         }
         return false
-    }
-
-    // MARK: Keep display awake
-
-    private func keepAwake(_ on: Bool) {
-        if on {
-            guard sleepAssertionID == 0 else { return }
-            IOPMAssertionCreateWithName(
-                kIOPMAssertionTypeNoDisplaySleep as CFString,
-                IOPMAssertionLevel(kIOPMAssertionLevelOn),
-                "Locker: screen locked" as CFString,
-                &sleepAssertionID
-            )
-        } else if sleepAssertionID != 0 {
-            IOPMAssertionRelease(sleepAssertionID)
-            sleepAssertionID = 0
-        }
     }
 }
 
