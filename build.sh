@@ -1,10 +1,10 @@
 #!/bin/bash
-# Builds Locker.app — a native macOS menu bar screen locker.
+# Builds InsomniacDev.app — a native macOS menu bar screen locker.
 set -euo pipefail
 cd "$(dirname "$0")"
 
-APP="Locker.app"
-NAME="Locker"
+APP="InsomniacDev.app"
+NAME="InsomniacDev"
 
 echo "→ Compiling…"
 rm -rf "$APP"
@@ -12,7 +12,7 @@ mkdir -p "$APP/Contents/MacOS"
 
 swiftc -O -o "$APP/Contents/MacOS/$NAME" Sources/main.swift \
     -framework Cocoa -framework LocalAuthentication -framework IOKit \
-    -framework ServiceManagement
+    -framework ServiceManagement -framework Carbon
 
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -20,8 +20,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <plist version="1.0">
 <dict>
     <key>CFBundleName</key><string>$NAME</string>
-    <key>CFBundleDisplayName</key><string>Locker</string>
-    <key>CFBundleIdentifier</key><string>com.tejas.locker</string>
+    <key>CFBundleDisplayName</key><string>InsomniacDev</string>
+    <key>CFBundleIdentifier</key><string>com.tejas.insomniacdev</string>
     <key>CFBundleVersion</key><string>1.0</string>
     <key>CFBundleShortVersionString</key><string>1.0</string>
     <key>CFBundlePackageType</key><string>APPL</string>
@@ -41,7 +41,11 @@ PLIST
 # Accessibility grant while System Settings still shows the toggle as ON.
 # Signing with a real identity keys the requirement to the certificate instead,
 # so the grant survives rebuilds.
-SIGN_ID="${LOCKER_SIGN_ID:-Locker Dev}"
+#
+# The default is deliberately still "Locker Dev": the identity is just a name in the
+# keychain and never appears in the app, so reusing the existing certificate avoids
+# minting a new one for a rename. Point INSOMNIACDEV_SIGN_ID at another identity to switch.
+SIGN_ID="${INSOMNIACDEV_SIGN_ID:-Locker Dev}"
 
 # Note: no -v. The identity is a self-signed root, so it reports as untrusted
 # (CSSMERR_TP_NOT_TRUSTED) and -v would hide it — but codesign signs with it

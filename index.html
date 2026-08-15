@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>InsomniacDev — keep building while you grab a coffee</title>
+<meta name="description" content="A tiny macOS menu bar app that locks your screen and keeps your Mac awake.">
+<style>
+  :root {
+    --bg: #ffffff;
+    --panel: #fafaf9;
+    --text: #16181d;
+    --muted: #6a7180;
+    --line: #e7e7e3;
+    --ink: #16181d;
+    --code-bg: #f6f6f4;
+    --footer-h: 56px;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 48px 20px calc(var(--footer-h) + 44px);
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  main { max-width: 660px; margin: 0 auto; }
+
+  header { margin-bottom: 38px; }
+  .icon { width: 44px; height: 44px; display: block; margin-bottom: 20px; color: var(--ink); }
+  h1 { font-size: 2.3rem; letter-spacing: -0.025em; margin: 0 0 8px; }
+  .tagline { font-size: 1.15rem; color: var(--muted); margin: 0; }
+
+  h2 {
+    font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.1em;
+    color: var(--muted); margin: 42px 0 14px; font-weight: 600;
+  }
+  p { margin: 0 0 14px; }
+
+  .download { margin: 30px 0 0; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 9px;
+    background: var(--ink); color: #fff; text-decoration: none;
+    padding: 13px 22px; border-radius: 9px; font-weight: 600; font-size: 1rem;
+  }
+  .btn:hover { opacity: 0.85; }
+  .btn svg { width: 17px; height: 17px; fill: currentColor; }
+  .meta { color: var(--muted); font-size: 0.87rem; margin: 10px 0 0; }
+
+  .note {
+    border-left: 2px solid var(--line); padding-left: 14px;
+    color: var(--muted); font-size: 0.94rem;
+  }
+
+  ol { margin: 0; padding-left: 20px; }
+  ol li { margin-bottom: 12px; }
+
+  .features { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+  .features li {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 9px;
+    padding: 12px 15px; font-size: 0.95rem;
+  }
+  .features b { display: block; font-weight: 600; }
+  .features span { color: var(--muted); font-size: 0.9rem; }
+
+  kbd {
+    background: var(--code-bg); border: 1px solid var(--line); border-bottom-width: 2px;
+    border-radius: 5px; padding: 1px 6px; font-size: 0.85em; white-space: nowrap;
+  }
+
+  details { margin-top: 8px; }
+  summary { cursor: pointer; color: var(--muted); font-size: 0.93rem; }
+  summary:hover { color: var(--text); }
+
+  .code {
+    position: relative; background: var(--code-bg); border: 1px solid var(--line);
+    border-radius: 9px; padding: 14px 16px; margin-top: 12px; overflow-x: auto;
+  }
+  .code pre {
+    margin: 0; font: 13px/1.7 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text);
+  }
+  .copy {
+    position: absolute; top: 8px; right: 8px; border: 1px solid var(--line);
+    background: #fff; color: var(--muted); border-radius: 6px;
+    padding: 4px 9px; font-size: 0.75rem; cursor: pointer; font-family: inherit;
+  }
+  .copy:hover { color: var(--text); }
+
+  footer {
+    position: fixed; left: 0; right: 0; bottom: 0; height: var(--footer-h);
+    display: flex; align-items: center; justify-content: center; gap: 26px;
+    background: #fff; border-top: 1px solid var(--line); font-size: 0.92rem;
+  }
+  footer a {
+    color: var(--text); text-decoration: none;
+    display: inline-flex; align-items: center; gap: 7px;
+  }
+  footer a:hover { opacity: 0.6; }
+  footer svg { width: 17px; height: 17px; fill: currentColor; }
+
+  @media (max-width: 480px) {
+    h1 { font-size: 1.9rem; }
+    footer { gap: 18px; font-size: 0.86rem; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <rect x="4" y="10.5" width="16" height="11" rx="2.5"></rect>
+      <path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"></path>
+    </svg>
+    <h1>InsomniacDev</h1>
+    <p class="tagline">Keep building while you grab a coffee — or even while you sleep.</p>
+
+    <div class="download">
+      <a class="btn" href="./InsomniacDev.zip" download>
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1a.75.75 0 0 1 .75.75v7.19l2.22-2.22a.75.75 0 1 1 1.06 1.06l-3.5 3.5a.75.75 0 0 1-1.06 0l-3.5-3.5a.75.75 0 0 1 1.06-1.06l2.22 2.22V1.75A.75.75 0 0 1 8 1ZM2.75 13.5a.75.75 0 0 0 0 1.5h10.5a.75.75 0 0 0 0-1.5H2.75Z"/></svg>
+        Download for macOS
+      </a>
+      <p class="meta">51 KB &middot; macOS 13 or newer &middot; Apple silicon &amp; Intel</p>
+    </div>
+  </header>
+
+  <h2>What it is</h2>
+  <p>
+    One Swift file, no dependencies, living in your menu bar. It does two things. It drops
+    a shield over every display and swallows your keyboard, mouse and trackpad until you
+    Touch ID back in — and it holds your Mac awake with real power assertions, so a long
+    job doesn't die just because the machine decided to turn in for the night.
+  </p>
+  <p class="note">
+    Worth being straight about: the lock is a <em>don't touch my machine</em> guard for
+    when you step away from your desk, not a security boundary. It's a window and an event
+    tap, so anyone who can reach the machine over SSH can end it. For a real boundary, use
+    <kbd>⌃⌘Q</kbd>.
+  </p>
+
+  <h2>Setting it up</h2>
+  <ol>
+    <li>Unzip and drag <b>InsomniacDev</b> to your Applications folder.</li>
+    <li><b>First launch:</b> right-click the app and choose <b>Open</b>. It's signed with a
+      self-signed certificate rather than a paid Apple developer ID, so double-clicking it
+      the first time gets you a Gatekeeper warning. Right-click ▸ Open gives you the button
+      to proceed. Once only.</li>
+    <li>Grant <b>Accessibility</b> when asked — System Settings ▸ Privacy &amp; Security ▸
+      Accessibility. That's what lets it block input while locked; without it you'd get a
+      shield that stops nothing.</li>
+  </ol>
+  <details>
+    <summary>Prefer to build it yourself?</summary>
+    <div class="code">
+      <button class="copy" type="button">Copy</button>
+<pre id="install">git clone https://github.com/tejaskh3/InsomniacDev.git
+cd InsomniacDev
+./build.sh
+open InsomniacDev.app</pre>
+    </div>
+  </details>
+
+  <h2>How to use</h2>
+  <ol>
+    <li><b>Lock</b> — press <kbd>⌃⌘L</kbd>, double-click the menu bar icon, or pick
+      <b>Lock Screen</b> from the menu.</li>
+    <li><b>Unlock</b> — touch the Touch ID sensor. The shield stays up and input stays
+      blocked for the whole prompt.</li>
+    <li><b>Keep awake</b> — click the icon and hit <b>Keep Awake</b>, or use <b>Start For</b>
+      to pick a span. The icon turns into an eye while a session is running.</li>
+    <li><b>Set the guardrails</b> — a battery cutoff so it switches itself off when you get
+      low, and whether the display stays lit or goes dark.</li>
+  </ol>
+
+  <h2>What's in the menu</h2>
+  <ul class="features">
+    <li><b>Lock Shortcut</b><span>⌃⌘L, ⌥⌘L, ⌃⇧L or ⌃⌥⌘L — or off entirely.</span></li>
+    <li><b>Block Trackpad Gestures</b><span>Swallow scroll, pinch, rotate and swipe while locked, not just clicks.</span></li>
+    <li><b>Start For</b><span>5 minutes to 5 hours, or no time limit, with the countdown in the menu.</span></li>
+    <li><b>Low Battery Cutoff</b><span>Ends the session at 10–40%, so it can't flatten your battery unattended.</span></li>
+    <li><b>Also Keep Display On</b><span>Off by default — work keeps running with the screen dark.</span></li>
+    <li><b>Launch at Login</b><span>Start with the Mac, and optionally start caffeinated too.</span></li>
+  </ul>
+
+  <h2>Known limits</h2>
+  <p class="note">
+    Nothing keeps a Mac awake through a closed lid — macOS forces sleep on clamshell
+    regardless. Sleep you ask for explicitly isn't blocked either; only idle sleep is. And a
+    display plugged in while the screen is already locked won't be covered until you unlock
+    and lock again.
+  </p>
+</main>
+
+<footer>
+  <a id="gh" href="#" target="_blank" rel="noopener">
+    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+    <span id="gh-label">GitHub</span>
+  </a>
+  <a id="tw" href="#" target="_blank" rel="noopener">
+    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M12.6 0h2.45l-5.36 6.12L16 16h-4.94l-3.87-5.06L2.77 16H.32l5.73-6.55L0 0h5.06l3.5 4.63L12.6 0Zm-.86 14.53h1.36L4.32 1.39H2.87l8.87 13.14Z"/></svg>
+    <span id="tw-label">Twitter</span>
+  </a>
+</footer>
+
+<script>
+  // ── Both links live here ─────────────────────────────────────────────────────
+  const LINKS = {
+    github: "https://github.com/tejaskh3/InsomniacDev",
+    twitter: "https://x.com/taashuu_"
+  };
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  const gh = document.getElementById("gh");
+  const tw = document.getElementById("tw");
+  gh.href = LINKS.github;
+  tw.href = LINKS.twitter;
+  document.getElementById("gh-label").textContent =
+    LINKS.github.replace(/^https:\/\/github\.com\//, "");
+  document.getElementById("tw-label").textContent =
+    "@" + LINKS.twitter.replace(/\/$/, "").split("/").pop();
+
+  document.querySelector(".copy").addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    try {
+      await navigator.clipboard.writeText(document.getElementById("install").textContent);
+      button.textContent = "Copied";
+    } catch {
+      // Clipboard is blocked on insecure origins and in some browsers — say so rather
+      // than showing "Copied" over a clipboard that never changed.
+      button.textContent = "Select manually";
+    }
+    setTimeout(() => { button.textContent = "Copy"; }, 1600);
+  });
+</script>
+</body>
+</html>
