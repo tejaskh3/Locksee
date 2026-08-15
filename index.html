@@ -29,8 +29,15 @@
   main { max-width: 660px; margin: 0 auto; }
 
   header { margin-bottom: 38px; }
-  .icon { width: 44px; height: 44px; display: block; margin-bottom: 20px; color: var(--ink); }
-  h1 { font-size: 2.3rem; letter-spacing: -0.025em; margin: 0 0 8px; }
+  h1 {
+    font-size: 2.3rem; letter-spacing: -0.025em; margin: 0 0 8px;
+    display: flex; align-items: center; gap: 13px;
+  }
+  /* Linked, not decorative: "it's on GitHub" only reassures if you can go look. */
+  .gh-mark { color: var(--ink); display: inline-flex; }
+  .gh-mark:hover { opacity: 0.6; }
+  .gh-mark svg { width: 38px; height: 38px; fill: currentColor; display: block; }
+  .meta a { color: var(--muted); }
   .tagline { font-size: 1.15rem; color: var(--muted); margin: 0; }
 
   h2 {
@@ -48,6 +55,120 @@
   .btn:hover { opacity: 0.85; }
   .btn svg { width: 17px; height: 17px; fill: currentColor; }
   .meta { color: var(--muted); font-size: 0.87rem; margin: 10px 0 0; }
+
+  /* Hero demo — a mockup of the real menu, not a screenshot, so it stays sharp at
+     any density and costs nothing to load. Item names match the app exactly. */
+  .demo { margin: 36px 0 0; }
+  .screen {
+    position: relative; height: 330px; border-radius: 13px; overflow: hidden;
+    background: radial-gradient(120% 130% at 15% 0%, #3a4a5c 0%, #1b2733 55%, #0f1720 100%);
+    border: 1px solid var(--line); box-shadow: 0 14px 34px rgba(16, 24, 32, 0.18);
+  }
+  .menubar {
+    height: 27px; display: flex; align-items: center; gap: 13px; padding: 0 11px;
+    background: rgba(255, 255, 255, 0.11); color: #fff;
+    font-size: 11px; font-weight: 500;
+  }
+  .menubar svg { width: 13px; height: 13px; display: block; }
+  .mb-app { margin-right: auto; }
+  .mb-icon { position: relative; padding: 3px 5px; border-radius: 4px; background: rgba(255,255,255,0.24); }
+  .mb-icon .eye { display: none; }
+  .screen.awake .mb-icon .eye { display: block; }
+  .screen.awake .mb-icon .lock { display: none; }
+
+  .menu {
+    position: absolute; top: calc(100% + 5px); right: -7px; width: 226px;
+    background: rgba(247, 247, 245, 0.97); border-radius: 9px; padding: 5px;
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.34); color: #16181d;
+    font-size: 12.5px; font-weight: 400; text-align: left;
+  }
+  /* Grid, not flex: the checkmark gets its own column so every label starts on the
+     same x whether or not the row is ticked. */
+  .mi {
+    display: grid; grid-template-columns: 12px 1fr auto; align-items: center;
+    gap: 7px; padding: 4px 8px; border-radius: 5px;
+  }
+  .mi .c { visibility: hidden; font-size: 11px; }
+  .mi.tick .c { visibility: visible; }
+  .mi .k { color: #8b909b; }
+  .mi.on { background: #2f6fed; color: #fff; }
+  .mi.on .k { color: rgba(255,255,255,0.8); }
+  .sub { color: #8b909b; font-size: 11.5px; padding: 0 8px 5px 27px; }
+  .msep { height: 1px; background: rgba(0,0,0,0.1); margin: 4px 6px; }
+
+  .shield {
+    position: absolute; inset: 27px 0 0; background: rgba(0, 0, 0, 0.55);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 12px; color: rgba(255,255,255,0.8); font-size: 12px;
+    opacity: 0; transition: opacity 0.45s ease;
+  }
+  .screen.locked .shield { opacity: 1; }
+  .screen.locked .menu { opacity: 0; }
+  .shield svg { width: 40px; height: 40px; }
+
+  .demo-caption { color: var(--muted); font-size: 0.85rem; margin: 10px 0 0; text-align: center; }
+
+  /* Setup walkthrough — decorative, so it's aria-hidden: the numbered list above
+     carries the same three steps for anyone who can't or won't watch it. */
+  .setup { margin-top: 18px; }
+  .stage {
+    position: relative; height: 156px; border-radius: 11px;
+    background: var(--panel); border: 1px solid var(--line); overflow: hidden;
+  }
+  .frame {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    gap: 20px; opacity: 0; transition: opacity 0.4s ease;
+  }
+  .stage[data-step="1"] .f1,
+  .stage[data-step="2"] .f2,
+  .stage[data-step="3"] .f3 { opacity: 1; }
+
+  .appicon {
+    width: 52px; height: 52px; border-radius: 12px; display: grid; place-items: center;
+    background: linear-gradient(160deg, #33404f, #16202b); color: #fff;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.18); flex: none;
+  }
+  .appicon svg { width: 26px; height: 26px; }
+  /* Glides toward the folder and stops beside it. Moving it the other way (rightwards
+     onto the folder) buries the folder underneath the icon. */
+  .glide { transform: translateX(-46px); transition: transform 1.1s cubic-bezier(.4,0,.2,1); }
+  .stage[data-step="1"] .glide { transform: translateX(0); }
+  .folder {
+    width: 56px; height: 46px; border-radius: 4px 9px 9px 9px; flex: none;
+    background: #7fa8d8; box-shadow: 0 4px 12px rgba(0,0,0,0.14);
+    display: grid; place-items: end center; padding-bottom: 5px;
+    color: rgba(255,255,255,0.95); font-size: 9px;
+  }
+
+  .ctx {
+    background: #fff; border-radius: 7px; padding: 4px; width: 148px;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.18); font-size: 11.5px;
+  }
+  .ctx div { padding: 3px 8px; border-radius: 4px; color: #16181d; }
+  .ctx .hl { background: #2f6fed; color: #fff; }
+
+  .prefrow {
+    display: flex; align-items: center; gap: 12px; background: #fff;
+    border: 1px solid var(--line); border-radius: 9px; padding: 11px 14px; width: 258px;
+  }
+  .prefrow .nm { flex: 1; font-size: 12.5px; }
+  .sw {
+    width: 40px; height: 23px; border-radius: 12px; background: #d7d7d4; position: relative;
+    transition: background 0.45s ease;
+  }
+  .sw::after {
+    content: ""; position: absolute; top: 2px; left: 2px; width: 19px; height: 19px;
+    border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    transition: transform 0.45s cubic-bezier(.4,0,.2,1);
+  }
+  .stage[data-step="3"] .sw { background: #34c759; }
+  .stage[data-step="3"] .sw::after { transform: translateX(17px); }
+
+  .steps { display: flex; gap: 7px; justify-content: center; margin-top: 11px; align-items: center; }
+  .steps span { width: 6px; height: 6px; border-radius: 50%; background: var(--line); transition: background 0.3s; }
+  .steps span.on { background: var(--muted); }
+  .steps .label { width: auto; height: auto; border-radius: 0; background: none;
+                  color: var(--muted); font-size: 0.83rem; margin-left: 8px; }
 
   .note {
     border-left: 2px solid var(--line); padding-left: 14px;
@@ -109,12 +230,13 @@
 <body>
 <main>
   <header>
-    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
-         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-      <rect x="4" y="10.5" width="16" height="11" rx="2.5"></rect>
-      <path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"></path>
-    </svg>
-    <h1>InsomniacDev</h1>
+    <h1>
+      <a class="gh-mark" id="ghMark" href="#" target="_blank" rel="noopener"
+         aria-label="View the source on GitHub" title="Open source — read every line on GitHub">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+      </a>
+      InsomniacDev
+    </h1>
     <p class="tagline">Keep building while you grab a coffee — or even while you sleep.</p>
 
     <div class="download">
@@ -122,7 +244,58 @@
         <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1a.75.75 0 0 1 .75.75v7.19l2.22-2.22a.75.75 0 1 1 1.06 1.06l-3.5 3.5a.75.75 0 0 1-1.06 0l-3.5-3.5a.75.75 0 0 1 1.06-1.06l2.22 2.22V1.75A.75.75 0 0 1 8 1ZM2.75 13.5a.75.75 0 0 0 0 1.5h10.5a.75.75 0 0 0 0-1.5H2.75Z"/></svg>
         Download for macOS
       </a>
-      <p class="meta">51 KB &middot; macOS 13 or newer &middot; Apple silicon &amp; Intel</p>
+      <p class="meta">
+        51 KB &middot; macOS 13 or newer &middot; Apple silicon &amp; Intel &middot;
+        <a id="srcLink" href="#" target="_blank" rel="noopener">open source</a>
+      </p>
+    </div>
+
+    <div class="demo">
+      <div class="screen" id="screen">
+        <div class="menubar">
+          <span class="mb-app">Xcode</span>
+          <span class="mb-icon">
+            <svg class="lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="4" y="10.5" width="16" height="11" rx="2.5"></rect>
+              <path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"></path>
+            </svg>
+            <svg class="eye" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M12 5c-5 0-9 4.5-10 7 1 2.5 5 7 10 7s9-4.5 10-7c-1-2.5-5-7-10-7Zm0 11a4 4 0 1 1 0-8 4 4 0 0 1 0 8Z"/>
+            </svg>
+
+            <div class="menu">
+              <div class="mi"><span class="c">✓</span><span>Lock Screen</span><span class="k">⌃⌘L</span></div>
+              <div class="mi"><span class="c">✓</span><span>Lock Shortcut</span><span class="k">›</span></div>
+              <div class="mi tick"><span class="c">✓</span><span>Block Trackpad Gestures</span><span class="k"></span></div>
+              <div class="msep"></div>
+              <div class="mi" id="miAwake"><span class="c">✓</span><span>Keep Awake</span><span class="k"></span></div>
+              <div class="sub" id="miSub">Keeping awake · 45 min left</div>
+              <div class="mi"><span class="c">✓</span><span>Start For</span><span class="k">›</span></div>
+              <div class="mi"><span class="c">✓</span><span>Low Battery Cutoff: 20%</span><span class="k">›</span></div>
+              <div class="msep"></div>
+              <div class="mi"><span class="c">✓</span><span>Quit InsomniacDev</span><span class="k">⌘Q</span></div>
+            </div>
+          </span>
+          <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 12.5a1.25 1.25 0 1 1 0 2.5 1.25 1.25 0 0 1 0-2.5Zm0-3.6c1 0 1.9.4 2.6 1.05l-1.1 1.1A2.1 2.1 0 0 0 8 10.4c-.6 0-1.1.2-1.5.6l-1.1-1.1A3.7 3.7 0 0 1 8 8.9Zm0-3.3c1.9 0 3.6.75 4.9 1.95l-1.1 1.1A5.6 5.6 0 0 0 8 7.2c-1.45 0-2.8.55-3.8 1.45l-1.1-1.1A7.2 7.2 0 0 1 8 5.6Z"/></svg>
+          <svg viewBox="0 0 24 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">
+            <rect x="1" y="3.5" width="18" height="9" rx="2.5"></rect>
+            <rect x="3" y="5.5" width="10" height="5" rx="1" fill="currentColor" stroke="none"></rect>
+            <path d="M21 6.5v3"></path>
+          </svg>
+          <span>9:41</span>
+        </div>
+
+        <div class="shield">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="4" y="10.5" width="16" height="11" rx="2.5"></rect>
+            <path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"></path>
+          </svg>
+          <span>Locked — Touch ID to unlock</span>
+        </div>
+      </div>
+      <p class="demo-caption">Everything lives in one menu. Lock it, or keep it awake on a timer.</p>
     </div>
   </header>
 
@@ -151,6 +324,54 @@
       Accessibility. That's what lets it block input while locked; without it you'd get a
       shield that stops nothing.</li>
   </ol>
+  <div class="setup" aria-hidden="true">
+    <div class="stage" id="stage" data-step="1">
+      <div class="frame f1">
+        <span class="appicon glide">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+               stroke-linecap="round" stroke-linejoin="round">
+            <rect x="4" y="10.5" width="16" height="11" rx="2.5"></rect>
+            <path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"></path>
+          </svg>
+        </span>
+        <span class="folder">Applications</span>
+      </div>
+
+      <div class="frame f2">
+        <span class="appicon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+               stroke-linecap="round" stroke-linejoin="round">
+            <rect x="4" y="10.5" width="16" height="11" rx="2.5"></rect>
+            <path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"></path>
+          </svg>
+        </span>
+        <div class="ctx">
+          <div class="hl">Open</div>
+          <div>Show Package Contents</div>
+          <div>Get Info</div>
+        </div>
+      </div>
+
+      <div class="frame f3">
+        <div class="prefrow">
+          <span class="appicon" style="width:26px;height:26px;border-radius:7px">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 style="width:14px;height:14px" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="4" y="10.5" width="16" height="11" rx="2.5"></rect>
+              <path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"></path>
+            </svg>
+          </span>
+          <span class="nm">InsomniacDev</span>
+          <span class="sw"></span>
+        </div>
+      </div>
+    </div>
+    <div class="steps">
+      <span class="d on"></span><span class="d"></span><span class="d"></span>
+      <span class="label" id="stepLabel">Drag it to Applications</span>
+    </div>
+  </div>
+
   <details>
     <summary>Prefer to build it yourself?</summary>
     <div class="code">
@@ -216,10 +437,73 @@ open InsomniacDev.app</pre>
   const tw = document.getElementById("tw");
   gh.href = LINKS.github;
   tw.href = LINKS.twitter;
+  document.getElementById("ghMark").href = LINKS.github;
+  document.getElementById("srcLink").href = LINKS.github;
   document.getElementById("gh-label").textContent =
     LINKS.github.replace(/^https:\/\/github\.com\//, "");
   document.getElementById("tw-label").textContent =
     "@" + LINKS.twitter.replace(/\/$/, "").split("/").pop();
+
+  // Cycle the hero through the three states the app actually has: idle, keeping
+  // awake with a countdown, and locked. Paused when the tab is hidden or the
+  // visitor prefers reduced motion.
+  const screen = document.getElementById("screen");
+  const awakeItem = document.getElementById("miAwake");
+  const subItem = document.getElementById("miSub");
+  const stillMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  const STATES = [
+    { cls: "", tick: false, sub: "" },
+    { cls: "awake", tick: true, sub: "Keeping awake · 45 min left" },
+    { cls: "awake", tick: true, sub: "Keeping awake · 44 min left" },
+    { cls: "locked", tick: true, sub: "Keeping awake · 44 min left" }
+  ];
+
+  let step = 0;
+  function render() {
+    const state = STATES[step % STATES.length];
+    screen.className = "screen " + state.cls;
+    awakeItem.className = "mi " + (state.tick ? "tick on" : "untick");
+    subItem.textContent = state.sub;
+    subItem.style.visibility = state.sub ? "visible" : "hidden";
+    step++;
+  }
+  render();
+  if (!stillMotion) {
+    let timer = setInterval(render, 2600);
+    document.addEventListener("visibilitychange", () => {
+      clearInterval(timer);
+      if (!document.hidden) timer = setInterval(render, 2600);
+    });
+  }
+
+  // Setup walkthrough, on its own slower beat — the drag and the toggle need time
+  // to finish animating before the frame swaps.
+  const stage = document.getElementById("stage");
+  const stepLabel = document.getElementById("stepLabel");
+  const dots = document.querySelectorAll(".steps .d");
+  const SETUP = [
+    "Drag it to Applications",
+    "First launch: right-click ▸ Open",
+    "Allow it under Accessibility"
+  ];
+
+  // Starts at 1 because the markup already renders step 1 — starting at 0 would make
+  // the first tick redraw it instead of advancing.
+  let setupStep = 1;
+  function renderSetup() {
+    setupStep = (setupStep % SETUP.length) + 1;
+    stage.dataset.step = String(setupStep);
+    stepLabel.textContent = SETUP[setupStep - 1];
+    dots.forEach((dot, i) => dot.classList.toggle("on", i === setupStep - 1));
+  }
+  if (!stillMotion) {
+    let setupTimer = setInterval(renderSetup, 3200);
+    document.addEventListener("visibilitychange", () => {
+      clearInterval(setupTimer);
+      if (!document.hidden) setupTimer = setInterval(renderSetup, 3200);
+    });
+  }
 
   document.querySelector(".copy").addEventListener("click", async (event) => {
     const button = event.currentTarget;
