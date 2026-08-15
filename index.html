@@ -358,12 +358,6 @@
     Touch ID back in — and it holds your Mac awake with real power assertions, so a long
     job doesn't die just because the machine decided to turn in for the night.
   </p>
-  <p class="note">
-    Worth being straight about: the lock is a <em>don't touch my machine</em> guard for
-    when you step away from your desk, not a security boundary. It's a window and an event
-    tap, so anyone who can reach the machine over SSH can end it. For a real boundary, use
-    <kbd>⌃⌘Q</kbd>.
-  </p>
 
   <h2>Setting it up</h2>
   <ol>
@@ -468,6 +462,20 @@ open InsomniacDev.app</pre>
 
     <details open>
       <summary class="mrow">
+        <span class="sit">You want input blocked while you're away from the desk</span>
+        <span class="pill yes">Works</span>
+        <span class="pill na">n/a</span>
+      </summary>
+      <p class="why">
+        The shield swallows keys, clicks and trackpad gestures until you Touch ID back in.
+        <code>caffeinate</code> doesn't do this — it isn't a locker. One caveat: displays are
+        shielded as they were when you locked, so a monitor plugged in mid-lock isn't covered
+        until you unlock and lock again.
+      </p>
+    </details>
+
+    <details>
+      <summary class="mrow">
         <span class="sit">You lock the screen and walk away</span>
         <span class="pill yes">Works</span>
         <span class="pill yes">Works</span>
@@ -524,27 +532,13 @@ open InsomniacDev.app</pre>
     <details>
       <summary class="mrow">
         <span class="sit">Battery drops to 15% while unattended</span>
-        <span class="pill warn">Stops itself</span>
+        <span class="pill warn">Set a cutoff</span>
         <span class="pill no">Runs it flat</span>
       </summary>
       <p class="why">
         The one real difference in day-to-day use. Set a cutoff between 10% and 40% and the
         session ends itself when you hit it. <code>caffeinate</code> has no battery awareness:
         left running on battery, it will happily hold your Mac awake until it dies.
-      </p>
-    </details>
-
-    <details>
-      <summary class="mrow">
-        <span class="sit">You want input blocked while you're away from the desk</span>
-        <span class="pill yes">Works</span>
-        <span class="pill na">n/a</span>
-      </summary>
-      <p class="why">
-        The shield swallows keys, clicks and trackpad gestures until you Touch ID back in.
-        <code>caffeinate</code> doesn't do this — it isn't a locker. One caveat: displays are
-        shielded as they were when you locked, so a monitor plugged in mid-lock isn't covered
-        until you unlock and lock again.
       </p>
     </details>
   </div>
