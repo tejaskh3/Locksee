@@ -51,6 +51,7 @@ second click of a double-click.
 | **Low Battery Cutoff** | Off, or end the session at 10–40%. Shows the current charge |
 | **Also Keep Display On** | Off by default — work keeps running with the screen dark |
 | **Keep Awake With Lid Closed** | Keep running after you shut the lid, on battery too. One-time admin password; see [Closed lid](#closed-lid) |
+| **Sleep Now** | Shown during a lid-closed session: ends it, turns sleep back on and sleeps the Mac |
 | **Remove Lid Helper…** | Uninstalls everything the option above put on the system |
 | **Keep Awake On Launch** | Start caffeinated |
 | **Launch at Login** | Register as a login item |
@@ -121,7 +122,8 @@ sudo launchctl bootout system/com.tejas.locksee.lidsafe; sudo pmset -a disablesl
 ```
 
 While it's on, **all** system sleep is off, not just lid sleep — *Sleep* from the Apple menu
-won't sleep the Mac either until the session ends.
+won't sleep the Mac either until the session ends. Use **Sleep Now** in Locksee's menu instead:
+it ends the session, turns sleep back on and sleeps the Mac in one step.
 
 **The lock is not a security boundary.** It's a *don't touch my machine* guard for when you
 step away from your desk. It's a window and an event tap, so anyone who can reach the machine

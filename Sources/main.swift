@@ -994,6 +994,17 @@ final class AppController: NSObject, NSApplicationDelegate {
             menu.addItem(status)
         }
 
+        // While sleep is disabled system-wide, the Apple menu's Sleep does nothing —
+        // and macOS doesn't tell apps about a sleep it refused, so we can't catch it.
+        // Offer the working way to sleep from here instead.
+        if keepAwake.lid.isEngaged {
+            let sleepItem = NSMenuItem(
+                title: "Sleep Now", action: #selector(sleepNow), keyEquivalent: "")
+            sleepItem.target = self
+            sleepItem.toolTip = "Ends the keep-awake session, turns sleep back on and sleeps the Mac."
+            menu.addItem(sleepItem)
+        }
+
         // A cutoff that fired ends the session leaving no other trace — without this
         // the Mac just quietly stops being held awake.
         if let error = keepAwake.lastError {
@@ -1233,6 +1244,25 @@ final class AppController: NSObject, NSApplicationDelegate {
         if keepAwake.isActive && !keepAwake.lid.isEngaged, let message = keepAwake.lastError {
             showWarning("Couldn't keep awake with the lid closed", message)
         }
+    }
+
+    @objc private func sleepNow() {
+        keepAwake.deactivate()
+        // Sleeping is pointless while SleepDisabled is still set — pmset would be
+        // refused just like the Apple menu. Say so rather than appear to do nothing.
+        guard !keepAwake.lid.isEngaged else {
+            showWarning("Couldn't put the Mac to sleep",
+                        "Locksee couldn't turn system sleep back on. Run "
+                        + "“sudo pmset -a disablesleep 0” in Terminal, then try again.")
+            return
+        }
+        // `pmset sleepnow` needs no root, unlike IOPMSleepSystem.
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/pmset")
+        process.arguments = ["sleepnow"]
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        try? process.run()
     }
 
     @objc private func uninstallLidHelper() {
