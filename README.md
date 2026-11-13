@@ -50,6 +50,8 @@ second click of a double-click.
 | **Start For** | 5 / 15 / 60 / 120 / 300 minutes, or no time limit |
 | **Low Battery Cutoff** | Off, or end the session at 10–40%. Shows the current charge |
 | **Also Keep Display On** | Off by default — work keeps running with the screen dark |
+| **Keep Awake With Lid Closed** | Keep running after you shut the lid, on battery too. One-time admin password; see [Closed lid](#closed-lid) |
+| **Remove Lid Helper…** | Uninstalls everything the option above put on the system |
 | **Keep Awake On Launch** | Start caffeinated |
 | **Launch at Login** | Register as a login item |
 
@@ -67,12 +69,16 @@ Monitoring, so there's no second prompt.
 Nothing else is used — no Input Monitoring, no Screen Recording, no network access. Locksee
 makes no network requests at all.
 
+The one exception is opt-in: **Keep Awake With Lid Closed** asks for your admin password once,
+to install a small root helper. It's not a permission in the System Settings sense, and nothing
+is installed unless you turn that option on. See [Closed lid](#closed-lid).
+
 ## When it works
 
 | Situation | Locksee | `caffeinate` |
 |---|---|---|
 | You lock the screen and walk away | works | works |
-| You close the lid | sleeps | sleeps |
+| You close the lid | works with **Keep Awake With Lid Closed** | sleeps |
 | Lid closed, on power, external display + keyboard | works | works |
 | You choose Sleep from the Apple menu | sleeps | sleeps |
 | Battery drops to 15% while unattended | stops itself | runs it flat |
@@ -82,11 +88,40 @@ makes no network requests at all.
 session's UI, so a keep-awake session keeps running behind the lock — including behind the
 real macOS lock screen.
 
-**A closed lid always wins.** Lid-close sleep isn't arbitrated by power assertions, so no
-assertion-based tool survives it — not this one, not `caffeinate`, and not KeepingYouAwake,
-whose own FAQ says it "will only prevent sleep on desktop Macs and portable Macs with an open
-lid." Getting past a closed lid needs a different mechanism: macOS's own clamshell mode, a
-root-level `pmset` change, or a tool that reads the lid-angle sensor on recent Apple silicon.
+### Closed lid
+
+Lid-close sleep isn't arbitrated by power assertions, so no assertion-based tool survives it —
+not plain keep-awake, not `caffeinate`, and not KeepingYouAwake, whose own FAQ says it "will
+only prevent sleep on desktop Macs and portable Macs with an open lid."
+
+What lid-close sleep *does* honour is the system power setting `SleepDisabled` — the one
+`sudo pmset -a disablesleep 1` writes. That's the mechanism behind Amphetamine's closed-display
+mode, and it's what **Keep Awake With Lid Closed** uses. It needs root, so turning the option on
+the first time installs, behind one admin password prompt:
+
+| File | What it is |
+|---|---|
+| `/Library/PrivilegedHelperTools/com.tejas.locksee.lidctl` | Root-owned shell script. `on` / `off` set and clear `SleepDisabled`; `failsafe` is for the daemon |
+| `/etc/sudoers.d/locksee` | Lets your user (by uid) run `lidctl on` and `lidctl off` without a password — those two exact commands, nothing else. Validated with `visudo` before it's installed |
+| `/Library/LaunchDaemons/com.tejas.locksee.lidsafe.plist` | **Fail-safe.** Every 10 seconds, and at boot: if Locksee disabled sleep and Locksee isn't running, turn sleep back on |
+
+`SleepDisabled` survives quits, crashes and reboots, which is why the fail-safe exists — a crash
+mid-session would otherwise leave a laptop that never sleeps, lid shut, in a bag. Locksee also
+clears it itself on every exit path it can see: ending the session, quitting, `SIGTERM`, and on
+the next launch. A marker file (`/var/db/com.tejas.locksee.lidsleep`) records that Locksee made
+the change, so the fail-safe never overrides a `pmset` you ran yourself.
+
+A sealed laptop can't shed heat the way an open one can. The session ends itself if macOS
+reports *critical* thermal pressure, and the low-battery cutoff applies as usual.
+
+**Remove Lid Helper…** deletes all three files and turns sleep back on. To do it by hand:
+
+```bash
+sudo launchctl bootout system/com.tejas.locksee.lidsafe; sudo pmset -a disablesleep 0; sudo rm -f /etc/sudoers.d/locksee /Library/LaunchDaemons/com.tejas.locksee.lidsafe.plist /Library/PrivilegedHelperTools/com.tejas.locksee.lidctl /var/db/com.tejas.locksee.lidsleep
+```
+
+While it's on, **all** system sleep is off, not just lid sleep — *Sleep* from the Apple menu
+won't sleep the Mac either until the session ends.
 
 **The lock is not a security boundary.** It's a *don't touch my machine* guard for when you
 step away from your desk. It's a window and an event tap, so anyone who can reach the machine

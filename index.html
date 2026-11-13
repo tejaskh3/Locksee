@@ -507,17 +507,18 @@ open Locksee.app</pre>
     <details>
       <summary class="mrow">
         <span class="sit">You close the lid</span>
-        <span class="pill no">Sleeps</span>
+        <span class="pill yes">Works</span>
         <span class="pill no">Sleeps</span>
       </summary>
       <p class="why">
-        Closing the lid triggers a different sleep path, one that power assertions don't touch.
-        So no assertion-based tool survives it — not this one, not <code>caffeinate</code>, and
-        not KeepingYouAwake, whose own FAQ says it "will only prevent sleep on desktop Macs and
-        portable Macs with an open lid." Getting past a closed lid needs a different mechanism
-        altogether: clamshell mode, a root-level <code>pmset</code> change, or one of the newer
-        tools that read the lid-angle sensor on recent Apple silicon. Worth remembering why
-        macOS does this — a laptop that never sleeps in a closed bag gets hot.
+        Closing the lid triggers a different sleep path, one that power assertions don't touch —
+        which is why <code>caffeinate</code> and KeepingYouAwake both sleep here. Turn on
+        <strong>Keep Awake With Lid Closed</strong> and Locksee switches off system sleep itself
+        (the <code>pmset disablesleep</code> setting) for the length of the session. That needs
+        your admin password once, to install a tiny helper plus a fail-safe that turns sleep back
+        on within seconds if Locksee quits or crashes. Worth remembering why macOS does this —
+        a laptop that never sleeps in a closed bag gets hot, so the session also ends itself if
+        the Mac reports critical heat.
       </p>
     </details>
 

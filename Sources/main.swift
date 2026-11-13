@@ -135,6 +135,198 @@ final class SleepAssertion {
     deinit { release() }
 }
 
+// MARK: - Closed-lid mode
+
+/// Keeps the Mac running with the lid shut — the same trick behind Amphetamine's
+/// closed-display mode.
+///
+/// Lid-close sleep ignores power assertions, but it does honour the system power
+/// setting `SleepDisabled`, which is what `pmset -a disablesleep 1` writes. That setting
+/// needs root, so a one-time install (a single admin password prompt) puts three
+/// things in place:
+///
+/// - `lidctl`, a root-owned script that can do exactly two things: set and clear it.
+/// - a sudoers rule letting this one user run `lidctl on` and `lidctl off` with no
+///   password — those two exact commands, nothing else.
+/// - a fail-safe LaunchDaemon that clears the setting whenever Locksee isn't running.
+///   `SleepDisabled` survives quits, crashes and reboots. Without the fail-safe a crash
+///   mid-session would leave a laptop that never sleeps, lid shut, inside a bag.
+///   Amphetamine ships the same safety net as "Closed-Display Mode Fail-Safe".
+final class LidSleepController {
+    static let helperPath = "/Library/PrivilegedHelperTools/com.tejas.locksee.lidctl"
+    static let daemonLabel = "com.tejas.locksee.lidsafe"
+    static let daemonPath = "/Library/LaunchDaemons/com.tejas.locksee.lidsafe.plist"
+    /// No reverse-DNS name here: sudo silently skips files in sudoers.d whose names
+    /// contain a dot, which would install a rule that never applies.
+    static let sudoersPath = "/etc/sudoers.d/locksee"
+    /// Created by lidctl just before it disables sleep. The fail-safe only ever undoes
+    /// a change that carries this marker, so it never fights a manual `pmset`.
+    static let markerPath = "/var/db/com.tejas.locksee.lidsleep"
+
+    private(set) var isEngaged = false
+
+    var isInstalled: Bool {
+        let fm = FileManager.default
+        return fm.isExecutableFile(atPath: Self.helperPath)
+            && fm.fileExists(atPath: Self.sudoersPath)
+            && fm.fileExists(atPath: Self.daemonPath)
+    }
+
+    // MARK: Engage / release
+
+    @discardableResult
+    func engage() -> Bool {
+        guard !isEngaged else { return true }
+        guard isInstalled, Self.runHelper("on") else { return false }
+        isEngaged = true
+        return true
+    }
+
+    func release() {
+        // Also clears a marker left by a previous run that crashed while engaged.
+        guard isEngaged || FileManager.default.fileExists(atPath: Self.markerPath) else { return }
+        if Self.runHelper("off") { isEngaged = false }
+    }
+
+    /// `sudo -n` never prompts: with the rule installed it runs, without it it fails
+    /// fast instead of hanging a GUI app on a password nobody can type.
+    private static func runHelper(_ verb: String) -> Bool {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/sudo")
+        process.arguments = ["-n", helperPath, verb]
+        process.standardInput = FileHandle.nullDevice
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        do { try process.run() } catch { return false }
+        process.waitUntilExit()
+        return process.terminationStatus == 0
+    }
+
+    // MARK: Install / uninstall
+
+    enum InstallError: Error {
+        case cancelled
+        case failed(String)
+    }
+
+    func install() -> Result<Void, InstallError> {
+        let files: [String: String] = [
+            "lidctl": Self.helperScript,
+            "daemon.plist": Self.daemonPlist,
+            "sudoers": Self.sudoersRule(uid: getuid()),
+            "run.sh": """
+            set -eu
+            cd "$(/usr/bin/dirname "$0")"
+            /usr/sbin/visudo -cqf ./sudoers
+            /bin/mkdir -p /Library/PrivilegedHelperTools
+            /usr/bin/install -o root -g wheel -m 755 ./lidctl '\(Self.helperPath)'
+            /usr/bin/install -o root -g wheel -m 644 ./daemon.plist '\(Self.daemonPath)'
+            /usr/bin/install -o root -g wheel -m 440 ./sudoers '\(Self.sudoersPath)'
+            /bin/launchctl bootout system/\(Self.daemonLabel) 2>/dev/null || true
+            /bin/launchctl bootstrap system '\(Self.daemonPath)'
+            """
+        ]
+        return runPrivileged(files)
+    }
+
+    func uninstall() -> Result<Void, InstallError> {
+        isEngaged = false
+        return runPrivileged(["run.sh": """
+            /bin/launchctl bootout system/\(Self.daemonLabel) 2>/dev/null || true
+            /usr/bin/pmset -a disablesleep 0
+            /bin/rm -f '\(Self.sudoersPath)' '\(Self.daemonPath)' '\(Self.helperPath)' '\(Self.markerPath)'
+            """])
+    }
+
+    /// Stages the files in a private temp directory and runs `run.sh` as root through
+    /// the standard admin password sheet. Touch ID isn't offered there, but this only
+    /// happens once — every later toggle goes through the sudoers rule.
+    private func runPrivileged(_ files: [String: String]) -> Result<Void, InstallError> {
+        let fm = FileManager.default
+        let dir = fm.temporaryDirectory.appendingPathComponent("locksee-\(UUID().uuidString)")
+        defer { try? fm.removeItem(at: dir) }
+        do {
+            try fm.createDirectory(at: dir, withIntermediateDirectories: false,
+                                   attributes: [.posixPermissions: 0o700])
+            for (name, contents) in files {
+                try contents.write(to: dir.appendingPathComponent(name),
+                                   atomically: true, encoding: .utf8)
+            }
+        } catch {
+            return .failure(.failed(error.localizedDescription))
+        }
+
+        let script = dir.appendingPathComponent("run.sh").path
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        let source = "do shell script \"/bin/sh \" & quoted form of \"\(script)\" "
+            + "with prompt \"Locksee wants to set up keeping your Mac awake with the lid closed.\" "
+            + "with administrator privileges"
+        var errorInfo: NSDictionary?
+        _ = NSAppleScript(source: source)?.executeAndReturnError(&errorInfo)
+        guard let errorInfo else { return .success(()) }
+        if (errorInfo[NSAppleScript.errorNumber] as? Int) == -128 { return .failure(.cancelled) }
+        return .failure(.failed(errorInfo[NSAppleScript.errorMessage] as? String ?? "Unknown error"))
+    }
+
+    // MARK: Installed files
+
+    static let helperScript = """
+    #!/bin/sh
+    # Locksee closed-lid helper. Root-owned. Reachable through sudo for `on` and `off`
+    # only; `failsafe` is run by the LaunchDaemon.
+    PATH=/usr/bin:/bin:/usr/sbin:/sbin
+    export PATH
+    MARKER='\(markerPath)'
+    case "${1:-}" in
+      on)
+        # Marker first: if anything after this fails, the fail-safe still cleans up.
+        /usr/bin/touch "$MARKER" || exit 1
+        /usr/bin/pmset -a disablesleep 1 || exit 1
+        ;;
+      off)
+        /usr/bin/pmset -a disablesleep 0 || exit 1
+        /bin/rm -f "$MARKER"
+        ;;
+      failsafe)
+        [ -e "$MARKER" ] || exit 0
+        /usr/bin/pgrep -x Locksee >/dev/null && exit 0
+        /usr/bin/pmset -a disablesleep 0 && /bin/rm -f "$MARKER"
+        ;;
+      *)
+        echo "usage: $0 on|off|failsafe" >&2
+        exit 64
+        ;;
+    esac
+    """
+
+    static let daemonPlist = """
+    <?xml version="1.0" encoding="UTF-8"?>
+    <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+    <plist version="1.0">
+    <dict>
+        <key>Label</key><string>\(daemonLabel)</string>
+        <key>ProgramArguments</key>
+        <array>
+            <string>\(helperPath)</string>
+            <string>failsafe</string>
+        </array>
+        <key>RunAtLoad</key><true/>
+        <key>StartInterval</key><integer>10</integer>
+    </dict>
+    </plist>
+    """
+
+    /// Keyed by uid (`#501`), not name, so no user name ever needs quoting for sudoers.
+    static func sudoersRule(uid: uid_t) -> String {
+        """
+        # Installed by Locksee. Lets one user toggle closed-lid mode, nothing else.
+        #\(uid) ALL=(root) NOPASSWD: \(helperPath) on, \(helperPath) off
+
+        """
+    }
+}
+
 // MARK: - Keep awake
 
 /// Standalone "don't let this Mac sleep" toggle, independent of the screen lock.
@@ -144,9 +336,9 @@ final class SleepAssertion {
 /// lit — on a laptop the display is the single largest draw, so forcing it on is
 /// opt-in via `keepDisplayOn`.
 ///
-/// Note this cannot survive a lid close. macOS forces sleep on clamshell regardless
-/// of any assertion (barring true clamshell mode: AC + external display + external
-/// input), so neither this nor any other userspace app can promise otherwise.
+/// Assertions alone can't survive a lid close — macOS forces sleep on clamshell
+/// regardless of any assertion (barring true clamshell mode: AC + external display +
+/// external input). `lidClosedMode` covers that case through `LidSleepController`.
 final class KeepAwakeController {
     enum Duration: Equatable {
         case indefinite
@@ -158,6 +350,7 @@ final class KeepAwakeController {
         static let lowBatteryCutoff = "lowBatteryCutoff"
         static let batteryFloor = "batteryFloorPercent"
         static let activateOnLaunch = "activateOnLaunch"
+        static let lidClosedMode = "lidClosedMode"
     }
 
     private let defaults = UserDefaults.standard
@@ -166,8 +359,11 @@ final class KeepAwakeController {
     private let display = SleepAssertion(
         type: kIOPMAssertionTypeNoDisplaySleep, reason: "Locksee: keep display awake")
 
+    let lid = LidSleepController()
+
     private var expiryTimer: Timer?
     private var batteryTimer: Timer?
+    private var thermalObserver: NSObjectProtocol?
 
     private(set) var isActive = false
     private(set) var expiresAt: Date?
@@ -181,8 +377,21 @@ final class KeepAwakeController {
             Key.keepDisplayOn: false,
             Key.lowBatteryCutoff: true,
             Key.batteryFloor: 20,
-            Key.activateOnLaunch: false
+            Key.activateOnLaunch: false,
+            Key.lidClosedMode: false
         ])
+
+        // A closed laptop that never sleeps can't shed heat through an open lid. If the
+        // system reports critical thermal pressure, give up rather than cook it.
+        thermalObserver = NotificationCenter.default.addObserver(
+            forName: ProcessInfo.thermalStateDidChangeNotification,
+            object: nil, queue: .main
+        ) { [weak self] _ in
+            guard let self, self.isActive, self.lid.isEngaged,
+                  ProcessInfo.processInfo.thermalState == .critical else { return }
+            self.lastError = "Keep awake switched off — the Mac got too hot with the lid closed."
+            self.deactivate()
+        }
     }
 
     // MARK: Preferences
@@ -233,6 +442,28 @@ final class KeepAwakeController {
         set { defaults.set(newValue, forKey: Key.activateOnLaunch); onChange?() }
     }
 
+    /// Keep running with the lid shut. Only settable to true once the helper is
+    /// installed — the menu handles the install before flipping this.
+    var lidClosedMode: Bool {
+        get { defaults.bool(forKey: Key.lidClosedMode) }
+        set {
+            defaults.set(newValue, forKey: Key.lidClosedMode)
+            if isActive {
+                if !newValue {
+                    lid.release()
+                    lastError = nil
+                } else if !lid.engage() {
+                    lastError = Self.lidFailure
+                }
+            }
+            onChange?()
+        }
+    }
+
+    private static let lidFailure =
+        "Couldn't keep awake with the lid closed — the lid helper didn't respond. "
+        + "Turn the option off, choose Remove Lid Helper…, then turn it back on."
+
     // MARK: Activation
 
     @discardableResult
@@ -246,6 +477,12 @@ final class KeepAwakeController {
         }
         guard system.acquire() else {
             lastError = "The system refused the power assertion."
+            onChange?()
+            return false
+        }
+        if lidClosedMode && !lid.engage() {
+            system.release()
+            lastError = Self.lidFailure
             onChange?()
             return false
         }
@@ -264,6 +501,7 @@ final class KeepAwakeController {
         expiryTimer = nil
         batteryTimer?.invalidate()
         batteryTimer = nil
+        lid.release()
         display.release()
         system.release()
         isActive = false
@@ -366,7 +604,9 @@ final class KeepAwakeController {
 
     var statusSummary: String {
         guard isActive else { return "Locksee — click for the menu, double-click to lock" }
-        return "Keeping awake" + (remainingDescription.map { " · \($0)" } ?? " · no time limit")
+        return "Keeping awake"
+            + (lid.isEngaged ? ", even with the lid closed" : "")
+            + (remainingDescription.map { " · \($0)" } ?? " · no time limit")
     }
 }
 
@@ -613,8 +853,35 @@ final class AppController: NSObject, NSApplicationDelegate {
         // user with a modal. The menu carries the warning instead.
         hotKey.apply()
 
+        // A crash or force-quit during a closed-lid session leaves sleep disabled
+        // system-wide. The fail-safe daemon catches that within seconds, but clean up
+        // here too in case it was removed by hand.
+        keepAwake.lid.release()
+        installTerminationHandlers()
+
         if keepAwake.activateOnLaunch {
             keepAwake.activate(for: .indefinite)
+        }
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        keepAwake.lid.release()
+    }
+
+    private var signalSources: [DispatchSourceSignal] = []
+
+    /// `kill` and `launchctl` send SIGTERM, which bypasses applicationWillTerminate.
+    /// Re-enable lid sleep on the way out rather than leaving it to the fail-safe.
+    private func installTerminationHandlers() {
+        for sig in [SIGTERM, SIGINT, SIGHUP] {
+            signal(sig, SIG_IGN)
+            let source = DispatchSource.makeSignalSource(signal: sig, queue: .main)
+            source.setEventHandler { [weak self] in
+                self?.keepAwake.lid.release()
+                exit(0)
+            }
+            source.resume()
+            signalSources.append(source)
         }
     }
 
@@ -729,7 +996,7 @@ final class AppController: NSObject, NSApplicationDelegate {
 
         // A cutoff that fired ends the session leaving no other trace — without this
         // the Mac just quietly stops being held awake.
-        if !keepAwake.isActive, let error = keepAwake.lastError {
+        if let error = keepAwake.lastError {
             let warning = NSMenuItem(title: "  ⚠︎ " + error, action: nil, keyEquivalent: "")
             warning.isEnabled = false
             menu.addItem(warning)
@@ -756,6 +1023,25 @@ final class AppController: NSObject, NSApplicationDelegate {
         displayItem.toolTip =
             "Off by default: work keeps running with the screen dark, which saves battery."
         menu.addItem(displayItem)
+
+        let lidItem = NSMenuItem(
+            title: "Keep Awake With Lid Closed", action: #selector(toggleLidClosedMode),
+            keyEquivalent: "")
+        lidItem.target = self
+        lidItem.state = keepAwake.lidClosedMode ? .on : .off
+        lidItem.toolTip =
+            "Keeps running after you shut the lid, on battery too. Needs a one-time admin "
+            + "password. Sleep comes back automatically when keep-awake ends or Locksee quits."
+        menu.addItem(lidItem)
+
+        if keepAwake.lid.isInstalled && !keepAwake.lidClosedMode {
+            let removeItem = NSMenuItem(
+                title: "Remove Lid Helper…", action: #selector(uninstallLidHelper),
+                keyEquivalent: "")
+            removeItem.target = self
+            removeItem.indentationLevel = 1
+            menu.addItem(removeItem)
+        }
 
         menu.addItem(batteryCutoffMenuItem())
 
@@ -907,6 +1193,61 @@ final class AppController: NSObject, NSApplicationDelegate {
             keepAwake.batteryFloor = sender.tag
             keepAwake.lowBatteryCutoff = true
         }
+    }
+
+    @objc private func toggleLidClosedMode() {
+        if keepAwake.lidClosedMode {
+            keepAwake.lidClosedMode = false
+            return
+        }
+        if !keepAwake.lid.isInstalled {
+            let alert = NSAlert()
+            alert.messageText = "Keep awake with the lid closed?"
+            alert.informativeText = """
+            macOS sleeps on lid close no matter what apps ask for. Locksee gets around \
+            that by switching off system sleep while a keep-awake session runs — the same \
+            setting as “sudo pmset disablesleep 1”.
+
+            That needs a small helper installed once, with your admin password. It can only \
+            turn sleep off and back on, and a fail-safe turns sleep back on within seconds \
+            if Locksee quits or crashes.
+
+            A closed laptop that can't sleep runs warmer — don't leave it in a bag.
+            """
+            alert.addButton(withTitle: "Install Helper")
+            alert.addButton(withTitle: "Cancel")
+            NSApp.activate(ignoringOtherApps: true)
+            guard alert.runModal() == .alertFirstButtonReturn else { return }
+
+            switch keepAwake.lid.install() {
+            case .success:
+                break
+            case .failure(.cancelled):
+                return
+            case .failure(.failed(let message)):
+                showWarning("Couldn't install the lid helper", message)
+                return
+            }
+        }
+        keepAwake.lidClosedMode = true
+        if keepAwake.isActive && !keepAwake.lid.isEngaged, let message = keepAwake.lastError {
+            showWarning("Couldn't keep awake with the lid closed", message)
+        }
+    }
+
+    @objc private func uninstallLidHelper() {
+        if case .failure(.failed(let message)) = keepAwake.lid.uninstall() {
+            showWarning("Couldn't remove the lid helper", message)
+        }
+    }
+
+    private func showWarning(_ title: String, _ message: String) {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = message
+        alert.alertStyle = .warning
+        NSApp.activate(ignoringOtherApps: true)
+        alert.runModal()
     }
 
     @objc private func toggleActivateOnLaunch() {
